@@ -18,6 +18,8 @@ int main(int argc, char** argv)
   cout << matrix4;
   Matrix<int, 3, 1> matrix5 = { 1, 1, 1};
   cout << matrix * matrix5;
+  matrix = { 1,2,3,1,2,3,0,0,1 };
+  cout << matrix.det();
   getchar();
   return 0;
 }

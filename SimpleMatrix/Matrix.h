@@ -116,7 +116,40 @@ public:
         return false;
     return true;
   }
+
+  void raw_transform(unsigned raw1, unsigned raw2, T factor) {
+    assert(raw1 < N && raw2 < N && "Out of the boundaries");
+    for (unsigned i = 0; i < M; i++) {
+      (*this)[raw1*N + i] += factor * (*this)[raw2*N + i];
+    }
+  }
+  T det();
 };
+
+template<typename T, size_t N, size_t M>
+T Matrix<T, N, M>::det() {
+  assert(N == M); // TODO: Release SFINAE variant
+  // TODO: More Effeccient algorithm
+  T det = 1;
+  for (unsigned i = 0; i < N; i++) {
+    T& diagonal = (*this)[i * N + i];
+    if(diagonal == 0){
+      unsigned k;
+      for (k = i + i * N; k < size; k += N) {
+        if ((*this)[k] != 0)
+          break;
+      }
+      if (k > size)
+        return 0;
+      raw_transform(i, k / N, 1);
+    }
+    for (unsigned j = i + 1; j < N; j++) {
+      raw_transform(j, i, -(*this)[j * N + i] / diagonal);
+    }
+    det *= diagonal;
+  }
+  return det;
+}
 
 template<typename T, size_t N, size_t M>
 inline Matrix<T, N, M> operator+(const Matrix<T, N, M>& matrix1, const Matrix<T, N, M>& matrix2) {
@@ -138,7 +171,7 @@ template<typename T, size_t N, size_t M>
 inline Matrix<T, N, M> operator*(const T& value, const Matrix<T, N, M>& matrix) {
   Matrix<T, N, M> m;
   for (unsigned i = 0; i < m.size; i++)
-    m[i] = matrix1[i] * value;
+    m[i] = matrix[i] * value;
   return m;
 }
 
@@ -146,7 +179,7 @@ template<typename T, size_t N, size_t M>
 inline Matrix<T, N, M> operator*(const Matrix<T, N, M>& matrix, const T& value) {
   Matrix<T, N, M> m;
   for (unsigned i = 0; i < m.size; i++)
-    m[i] = value * matrix1[i];
+    m[i] = value * matrix[i];
   return m;
 }
 
