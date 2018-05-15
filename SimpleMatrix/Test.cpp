@@ -4,6 +4,7 @@
 #include <ctime>
 #include <string>
 #include <iomanip>
+#include <vector>
 
 #include "Matrix.h"
 
@@ -82,30 +83,24 @@ float float_rand(float LO, float HI) {
 template<typename T, size_t N, size_t M>
 Matrix<T, N, M> gen_random_matrix(size_t scale) {
   Matrix<T, N, M> matrix;
-  for (auto itr = matrix.begin(); itr != matrix.end(); ++itr) {
-    *itr = static_cast<T>(rand() % scale);
-  }
+  generate(matrix.begin(), matrix.end(), 
+    [scale]() {return static_cast<T>(rand() % scale); });
   return matrix;
 }
 
 template<size_t N, size_t M>
 Matrix<float, N, M> gen_random_matrix(float LO, float HI) {
   Matrix<float, N, M> matrix;
-  for (auto itr = matrix.begin(); itr != matrix.end(); ++itr) {
-    *itr = float_rand(LO, HI);
-  }
+  generate(matrix.begin(), matrix.end(), [LO, HI]() {return float_rand(LO, HI); });
   return matrix;
 }
 
 template<typename T, size_t N, size_t M>
 Matrix<T, N, M> gen_unit_matrix() {
   Matrix<T, N, M> matrix;
-  for (auto itr = matrix.begin(); itr != matrix.end(); ++itr) {
-    if (itr.get_pos() % M == itr.get_pos() / M)
-      *itr = 1;
-    else
-      *itr = 0;
-  }
+  size_t pos = 0;
+  generate(matrix.begin(), matrix.end(),
+    [&pos]() {return (pos % M == pos++ / M) ? 1 : 0; });
   return matrix;
 }
 
@@ -150,7 +145,7 @@ int main(int argc, char** argv)
     matrix1 = i_list;
     bool res = true;
     auto itr = i_list.begin();
-    for (size_t i = 0; i < matrix.size; i++) {
+    for (size_t i = 0; i < matrix.get_size(); i++) {
       if (matrix[i] != *itr) {
         res = false;
         break;
@@ -168,7 +163,7 @@ int main(int argc, char** argv)
     };
     bool res = true;
     auto itr = i_list.begin();
-    for (size_t i = 0; i < matrix.size; i++) {
+    for (size_t i = 0; i < matrix.get_size(); i++) {
       if (matrix[i] != *itr) {
         res = false;
         break;

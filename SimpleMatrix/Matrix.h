@@ -18,15 +18,11 @@ namespace sm {
   class MatrixBuff {
   private:
     T *buffer;
-
-    static void buff_copy(const T* begin, const T* end, T* buffer) {
-      for (const T* t = begin; t != end; t++) {
-        *buffer = *t;
-        buffer++;
-      }
-    }
+    static constexpr size_t size = N * M;
   public:
-    static constexpr int size = N * M;
+    static constexpr size_t get_size() {
+      return size;
+    }
 
     typedef MatrixIterator<T> iterator;
     typedef MatrixIterator<const T> const_iterator;
@@ -69,7 +65,7 @@ namespace sm {
     MatrixBuff(const MatrixBuff& MB) {
       buffer = new T[size];
       try {
-        buff_copy(MB.buffer, MB.buffer + MB.size, buffer);
+        std::copy(MB.begin(), MB.end(), begin());
       }
       catch (...) {
         delete[] buffer;
@@ -78,7 +74,6 @@ namespace sm {
     }
 
     MatrixBuff(MatrixBuff<T, N, M>&& MB) {
-      delete[] buffer;
       buffer = MB.buffer;
       MB.buffer = nullptr;
     }
@@ -87,9 +82,8 @@ namespace sm {
     MatrixBuff(const MatrixBuff<K, N, M>& MB) {
       buffer = new T[size];
       try {
-        for (unsigned i = 0; i < size; i++) {
-          this->set(i, static_cast<T>(MB[i]));
-        }
+        std::transform(MB.begin(), MB.end(), begin(), 
+          [](const K& elem) { return static_cast<T>(elem); });
       }
       catch (...) {
         delete[] buffer;
@@ -102,7 +96,7 @@ namespace sm {
       buffer = new T[size];
       try
       {
-        buff_copy(i_list.begin(), i_list.end(), buffer);
+        std::copy(i_list.begin(), i_list.end(), begin());
       }
       catch (...)
       {
@@ -119,7 +113,7 @@ namespace sm {
       try {
         for (auto row : i_list) {
           assert(row.size() <= M && "Too long row in initializer list");
-          buff_copy(row.begin(), row.end(), buffer + pos);
+          std::copy(row.begin(), row.end(), at(pos));
           pos += M;
         }
       }
@@ -137,9 +131,11 @@ namespace sm {
     }
 
     MatrixBuff& operator=(MatrixBuff&& MB) {
-      delete[] buffer;
-      buffer = MB.buffer;
-      MB.buffer = nullptr;
+      if (MB.buffer != buffer) {
+        delete[] buffer;
+        buffer = MB.buffer;
+        MB.buffer = nullptr;
+      }
       return *this;
     }
 
@@ -231,7 +227,7 @@ namespace sm {
     Matrix<T, M, N> tr_matrix;
     for (size_t row_num = 0; row_num < N; row_num++) {
       for (size_t pos1 = row_num * M, pos2 = row_num;
-        pos1 < matrix.size && pos2 < tr_matrix.size;
+        pos1 < matrix.get_size() && pos2 < tr_matrix.get_size();
         ++pos1, pos2 += N) {
         tr_matrix[pos2] = matrix[pos1];
       }
@@ -243,13 +239,13 @@ namespace sm {
   T Matrix<T, N, M>::gauss_det() {
     T det = 1;
 
-    std::array<uint16_t, M> excluded_columns = { false };
+    std::array<uint16_t, M> excluded_columns = { 0 };
 
     // Row position of the last diagonal element, affect element parity
     size_t split_point = 0;
 
     // For each row in matrix
-    for (unsigned row_num = 0; row_num < N; row_num++) {
+    for (size_t row_num = 0; row_num < N; row_num++) {
       auto row_begin = this->at(row_num * M);
       auto row_end = this->at(row_num * M + M);
 
@@ -277,19 +273,19 @@ namespace sm {
       }
 
       // Divide all elems in row by diagonal
-      std::for_each(row_begin, row_end,
-        [val = *diagonal_elem](T& elem) {elem /= val; });
+      std::transform(row_begin, row_end, row_begin,
+        [val = *diagonal_elem](const T& elem) { return elem / val; });
 
       // Substract this row from the underlying rows to get zeros in column
       for (size_t row_num_next = row_num + 1; row_num_next < N; row_num_next++) {
         row_transform(row_num_next, row_num,
-          -this->get(row_num_next, diag_row_pos));
+          -1 * this->get(row_num_next, diag_row_pos));
         // Set zeros to avoid errors
         this->set(row_num_next, diag_row_pos, 0);
       }
 
       split_point = diag_row_pos;
-      excluded_columns[diag_row_pos] = true;
+      excluded_columns[diag_row_pos] = 1;
     }
     return det;
   }
@@ -301,23 +297,13 @@ namespace sm {
     static_assert(std::is_arithmetic<T>::value,
       "Determinant can be evaluated only for numerical matrixes ");
 
-    constexpr bool is_float_point = std::is_floating_point<T>::value;
-    double det;
-    if (is_float_point) {
-      Matrix<long double, N, M> tmp = Matrix(*this);
-      det = static_cast<long double>(tmp.gauss_det());
-    }
-    else {
-      Matrix<long double, N, M> tmp = Matrix(*this);
-      det = static_cast<long double>(tmp.gauss_det());
-    }
-    return det;
+    Matrix<long double, N, M> tmp = Matrix(*this);
+    return static_cast<long double>(tmp.gauss_det());
   }
 
   template<typename T, size_t N, size_t M>
   inline bool operator==(const Matrix<T, N, M>& matrix1, const Matrix<T, N, M>& matrix2) {
-    Matrix<T, N, M> m;
-    for (size_t i = 0; i < m.size; i++)
+    for (size_t i = 0; i < matrix1.get_size(); i++)
       if (matrix1[i] != matrix2[i])
         return false;
     return true;
@@ -326,7 +312,7 @@ namespace sm {
   template<typename T, size_t N, size_t M>
   inline Matrix<T, N, M> operator+(const Matrix<T, N, M>& matrix1, const Matrix<T, N, M>& matrix2) {
     Matrix<T, N, M> m;
-    for (unsigned i = 0; i < m.size; i++)
+    for (unsigned i = 0; i < matrix1.get_size(); i++)
       m[i] = matrix1[i] + matrix2[i];
     return m;
   }
@@ -334,7 +320,7 @@ namespace sm {
   template<typename T, size_t N, size_t M>
   inline Matrix<T, N, M> operator-(const Matrix<T, N, M>& matrix1, const Matrix<T, N, M>& matrix2) {
     Matrix<T, N, M> m;
-    for (unsigned i = 0; i < m.size; i++)
+    for (unsigned i = 0; i < matrix1.get_size(); i++)
       m[i] = matrix1[i] - matrix2[i];
     return m;
   }
@@ -342,7 +328,7 @@ namespace sm {
   template<typename T, size_t N, size_t M>
   inline Matrix<T, N, M> operator*(const T& value, const Matrix<T, N, M>& matrix) {
     Matrix<T, N, M> m;
-    for (unsigned i = 0; i < m.size; i++)
+    for (unsigned i = 0; i < get_size(); i++)
       m[i] = matrix[i] * value;
     return m;
   }
@@ -350,7 +336,7 @@ namespace sm {
   template<typename T, size_t N, size_t M>
   inline Matrix<T, N, M> operator*(const Matrix<T, N, M>& matrix, const T& value) {
     Matrix<T, N, M> m;
-    for (unsigned i = 0; i < m.size; i++)
+    for (unsigned i = 0; i < get_size(); i++)
       m[i] = value * matrix[i];
     return m;
   }
@@ -359,7 +345,7 @@ namespace sm {
   inline Matrix<T, N, K> operator*(const Matrix<T, N, M>& matrix1, const Matrix<T, M, K>& matrix2) {
     Matrix<T, N, K> m;
     Matrix<T, K, M> tr_matrix2 = get_transp(matrix2);
-    for (size_t pos = 0; pos < m.size; pos++) {
+    for (size_t pos = 0; pos < m.get_size(); pos++) {
       m[pos] = 0;
       size_t row_num1 = pos / K;
       size_t row_num2 = pos % K;
@@ -367,28 +353,13 @@ namespace sm {
         m[pos] += matrix1.get(row_num1, pos2) * tr_matrix2.get(row_num2, pos2);
       }
     }
-    //for (size_t pos = 0; pos < m.size; pos++) {
-    //  m[pos] = 0;
-    //  unsigned row_num = M * (pos / K);
-    //  unsigned col_num = pos % K;
-    //  for (size_t pos1 = row_num, pos2 = col_num;
-    //    pos1 < matrix1.size && pos2 < matrix2.size;
-    //    ++pos1, pos2 += K) {
-    //    m[pos] += matrix1[pos1] * matrix2[pos2];
-    //  }
-    //  /*while (row_num < matrix1.size && col_num < matrix2.size) {
-    //    m[i] += matrix1[row_num] * matrix2[col_num];
-    //    row_num += 1;
-    //    col_num += K;
-    //  }*/
-    //}
     return m;
   }
 
   template<typename T, size_t N, size_t M>
   inline std::ostream& operator<<(std::ostream& os, const Matrix<T, N, M>& matrix) {
     os << "<MATRIX " << N << "*" << M << ">" << '\n';
-    for (unsigned i = 0; i < matrix.size; i++) {
+    for (unsigned i = 0; i < matrix.get_size(); i++) {
       os << matrix[i];
       if ((i + 1) % M == 0)
         os << '\n';
